@@ -1,50 +1,68 @@
-import { ChangeEvent, FC, useCallback, useState } from 'react';
-import { Div, FormItem, NavIdProps, Panel, PanelHeader, PanelHeaderBack, Textarea } from '@vkontakte/vkui';
+import { ChangeEvent, FC, useCallback, useEffect, useRef, useState } from 'react';
+import { Div, FormItem, NavIdProps, Panel, PanelHeader, PanelHeaderBack, Spinner, Textarea } from '@vkontakte/vkui';
 import { useRouteNavigator } from '@vkontakte/vk-mini-apps-router';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { debounce } from '../utils/debounce';
+import { useForm } from 'react-hook-form';
+import { TAgeInfoData } from '../types';
 
 export const NameAge: FC<NavIdProps> = ({ id }) => {
-    const [nameValue, setValue] = useState('')
-    const routeNavigator = useRouteNavigator();
-    const { isPending, error, data, refetch } = useQuery({
-        queryKey: ['repoData'],
-        queryFn: () =>
-          fetch(`https://api.agify.io/?name=${nameValue}`).then((res) =>
-            res.json(),
-          ),
-          enabled: false
-      })
-    
-    if (isPending) console.log('Loading...') 
+  const cache = useRef<Record<string, number | null>>({})
+  const {register, setValue, getValues} = useForm()
+  const [age, setAge] = useState<number | undefined | null>()
+  const routeNavigator = useRouteNavigator();
+  const queryClient = useQueryClient()
+  const { isFetching,  data, refetch } = useQuery<TAgeInfoData>({
+    queryKey: ['age'],
+      queryFn: async ({signal}) =>
+        fetch(`https://api.agify.io/?name=${getValues('nameAge')}`, {signal}).then((res) =>
+          res.json(),
+      ),
+    enabled: false
+  })
 
-    if (error) console.log('An error has occurred: ' + error.message)
+  const handleInputChange = (event: ChangeEvent<HTMLTextAreaElement>) => {
+    setValue('nameAge', event.target.value)
+    debounceRefetch()
+  }
 
-    const debounceRefetch = useCallback(debounce(refetch, 3000), [])
-
-    const handleInputChange = (event: ChangeEvent<HTMLTextAreaElement>) => {
-        setValue(event.target.value)
-        debounceRefetch()
+  const getAgeData = useCallback(() => {
+    if (!cache.current[getValues('nameAge')]) {
+      queryClient.cancelQueries({ queryKey: ['age'] })
+      refetch()
     }
-      
-    return (
-        <Panel id={id}>
-          <PanelHeader before={<PanelHeaderBack onClick={() => routeNavigator.back()} />}>
-            Возраст по имени
-          </PanelHeader>
-          <FormItem htmlFor="name-age">
-            <Textarea
-                id="name-age"
-                placeholder='Введите имя'
-                onChange={handleInputChange}
-            >{nameValue}</Textarea>
-            
-          </FormItem>
+    else {
+      setAge(cache.current[getValues('nameAge')])
+    }
+    
+  }, []) 
 
-          <Div>
-            {!isPending ? data.age : ''}
-          </Div>
-          
-        </Panel>
-      );
+  const debounceRefetch = useCallback(debounce(getAgeData, 3000), [])
+
+  useEffect(() => {
+    if (data) {
+      cache.current[data.name] = data.age
+      setAge(data.age)
+    }
+  }, [data])
+      
+  return (
+    <Panel id={id}>
+      <PanelHeader before={<PanelHeaderBack onClick={() => routeNavigator.back()} />}>
+        Возраст по имени
+      </PanelHeader>
+      <FormItem htmlFor="nameAge">
+        <Textarea
+          id="nameAge"
+          {...register('nameAge')}
+          placeholder='Введите имя'
+          onChange={handleInputChange}
+        />
+      </FormItem>
+      {isFetching ? <Spinner size="medium" style={{ margin: '20px 0' }}/> : <Div>
+        {age}
+      </Div>}
+      
+    </Panel>
+  );
 }
