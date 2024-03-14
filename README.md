@@ -9,7 +9,7 @@
 - TypeScript
 - VKUI
 - TanStack Query
-## Хостинг
+## Приложение
 Ссылка на приложение [https://vk.com/app51875816](https://vk.com/app51875816)
 
 ## Установка и запуск
